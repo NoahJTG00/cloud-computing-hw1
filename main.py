@@ -14,6 +14,7 @@ from typing import Optional
 from models.person import PersonCreate, PersonRead, PersonUpdate
 from models.address import AddressCreate, AddressRead, AddressUpdate
 from models.course import CourseCreate, CourseRead, CourseUpdate
+from models.assignment import AssignmentCreate, AssignmentRead, AssignmentUpdate
 from models.health import Health
 
 port = int(os.environ.get("FASTAPIPORT", 8000))
@@ -24,10 +25,11 @@ port = int(os.environ.get("FASTAPIPORT", 8000))
 persons: Dict[UUID, PersonRead] = {}
 addresses: Dict[UUID, AddressRead] = {}
 courses: Dict[UUID, CourseRead] = {}
+assignments: Dict[UUID, AssignmentRead] = {}
 
 app = FastAPI(
-    title="Person/Address/Course API",
-    description="Demo FastAPI app using Pydantic v2 models for Person, Address, and Course",
+    title="Person/Address/Course/Assignment API",
+    description="Demo FastAPI app using Pydantic v2 models for Person, Address, Course, and Assignment",
     version="0.1.0",
 )
 
@@ -211,11 +213,60 @@ def delete_course(course_id: UUID):
     return {"message": "Course deleted successfully"}
 
 # -----------------------------------------------------------------------------
+# Assignment endpoints
+# -----------------------------------------------------------------------------
+@app.post("/assignments", response_model=AssignmentRead, status_code=201)
+def create_assignment(assignment: AssignmentCreate):
+    # Each assignment gets its own UUID; stored as AssignmentRead
+    assignment_read = AssignmentRead(**assignment.model_dump())
+    assignments[assignment_read.id] = assignment_read
+    return assignment_read
+
+@app.get("/assignments", response_model=List[AssignmentRead])
+def list_assignments(
+    name: Optional[str] = Query(None, description="Filter by assignment name"),
+    due_date: Optional[str] = Query(None, description="Filter by due date"),
+    points: Optional[int] = Query(None, description="Filter by points"),
+):
+    results = list(assignments.values())
+
+    if name is not None:
+        results = [a for a in results if a.name == name]
+    if due_date is not None:
+        results = [a for a in results if a.due_date == due_date]
+    if points is not None:
+        results = [a for a in results if a.points == points]
+
+    return results
+
+@app.get("/assignments/{assignment_id}", response_model=AssignmentRead)
+def get_assignment(assignment_id: UUID):
+    if assignment_id not in assignments:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return assignments[assignment_id]
+
+@app.patch("/assignments/{assignment_id}", response_model=AssignmentRead)
+def update_assignment(assignment_id: UUID, update: AssignmentUpdate):
+    if assignment_id not in assignments:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    stored = assignments[assignment_id].model_dump()
+    stored.update(update.model_dump(exclude_unset=True))
+    assignments[assignment_id] = AssignmentRead(**stored)
+    return assignments[assignment_id]
+
+@app.delete("/assignments/{assignment_id}")
+def delete_assignment(assignment_id: UUID):
+    if assignment_id not in assignments:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    del assignments[assignment_id]
+    return {"message": "Assignment deleted successfully"}
+
+# -----------------------------------------------------------------------------
 # Root
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "Welcome to the Person/Address/Course API. See /docs for OpenAPI UI."}
+    return {"message": "Welcome to the Person/Address/Course/Assignment API. See /docs for OpenAPI UI."}
 
 # -----------------------------------------------------------------------------
 # Entrypoint for `python main.py`
