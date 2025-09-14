@@ -13,6 +13,7 @@ from typing import Optional
 
 from models.person import PersonCreate, PersonRead, PersonUpdate
 from models.address import AddressCreate, AddressRead, AddressUpdate
+from models.course import CourseCreate, CourseRead, CourseUpdate
 from models.health import Health
 
 port = int(os.environ.get("FASTAPIPORT", 8000))
@@ -22,10 +23,11 @@ port = int(os.environ.get("FASTAPIPORT", 8000))
 # -----------------------------------------------------------------------------
 persons: Dict[UUID, PersonRead] = {}
 addresses: Dict[UUID, AddressRead] = {}
+courses: Dict[UUID, CourseRead] = {}
 
 app = FastAPI(
-    title="Person/Address API",
-    description="Demo FastAPI app using Pydantic v2 models for Person and Address",
+    title="Person/Address/Course API",
+    description="Demo FastAPI app using Pydantic v2 models for Person, Address, and Course",
     version="0.1.0",
 )
 
@@ -160,11 +162,60 @@ def update_person(person_id: UUID, update: PersonUpdate):
     return persons[person_id]
 
 # -----------------------------------------------------------------------------
+# Course endpoints
+# -----------------------------------------------------------------------------
+@app.post("/courses", response_model=CourseRead, status_code=201)
+def create_course(course: CourseCreate):
+    # Each course gets its own UUID; stored as CourseRead
+    course_read = CourseRead(**course.model_dump())
+    courses[course_read.id] = course_read
+    return course_read
+
+@app.get("/courses", response_model=List[CourseRead])
+def list_courses(
+    name: Optional[str] = Query(None, description="Filter by course name"),
+    code: Optional[str] = Query(None, description="Filter by course code"),
+    credits: Optional[int] = Query(None, description="Filter by number of credits"),
+):
+    results = list(courses.values())
+
+    if name is not None:
+        results = [c for c in results if c.name == name]
+    if code is not None:
+        results = [c for c in results if c.code == code]
+    if credits is not None:
+        results = [c for c in results if c.credits == credits]
+
+    return results
+
+@app.get("/courses/{course_id}", response_model=CourseRead)
+def get_course(course_id: UUID):
+    if course_id not in courses:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return courses[course_id]
+
+@app.patch("/courses/{course_id}", response_model=CourseRead)
+def update_course(course_id: UUID, update: CourseUpdate):
+    if course_id not in courses:
+        raise HTTPException(status_code=404, detail="Course not found")
+    stored = courses[course_id].model_dump()
+    stored.update(update.model_dump(exclude_unset=True))
+    courses[course_id] = CourseRead(**stored)
+    return courses[course_id]
+
+@app.delete("/courses/{course_id}")
+def delete_course(course_id: UUID):
+    if course_id not in courses:
+        raise HTTPException(status_code=404, detail="Course not found")
+    del courses[course_id]
+    return {"message": "Course deleted successfully"}
+
+# -----------------------------------------------------------------------------
 # Root
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "Welcome to the Person/Address API. See /docs for OpenAPI UI."}
+    return {"message": "Welcome to the Person/Address/Course API. See /docs for OpenAPI UI."}
 
 # -----------------------------------------------------------------------------
 # Entrypoint for `python main.py`
